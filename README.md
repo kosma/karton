@@ -3,15 +3,14 @@ cardboard
 
 Redis reimplementation in Python.
 
+NOTE: This project is work in progress. Things *will* break. It may not even
+      start at all.
+
 Usage
 -----
 
-NOTE: **This project is work in progress.** Things *will* break.
-
 **Standalone**: start with ``twisted_cardboard.py``. Use your regular client or
 simply ``redis-cli`` to interact with it.
-
-**Embedded**: work in progress, as the interface is not stable yet.
 
 Caveats
 -------
