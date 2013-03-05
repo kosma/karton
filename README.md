@@ -3,20 +3,29 @@ cardboard
 
 Redis reimplementation in Python.
 
-NOTE: This project is work in progress. Things *will* break. It may not even
-      start at all.
+NOTE: This project is work in progress.
 
 Usage
 -----
 
-**Standalone**: start with ``twisted_cardboard.py``. Use your regular client or
-simply ``redis-cli`` to interact with it.
+Requirements: ``twisted``, ``hiredis``.
+
+Clone the repository. Start with ``./twisted_cardboard.py``. Use your favourite
+client or simply ``redis-cli`` to interact with it.
+
+Status
+------
+
+* Starts. (yay!)
+* Basic commands work.
+* You can actually run the Redis test suite against it! ``./run_redis_tests``
 
 Caveats
 -------
 
+* This project hasn't even reached the proof-of-concept level yet.
 * There is no persistence. When the instance dies, you lose all the data.
-* Not all commands are implemented.
+* Not all commands are implemented (e.g. no expires, no zsets).
 * There are dozens of unfixed bugs.
 
 Goals
