@@ -24,8 +24,14 @@ run_test() {
 }
 
 # Run the test suites. Good luck.
-run_test unit/auth
-run_test unit/basic
-run_test unit/type/list
-run_test unit/type/set
-run_test unit/type/zset
+if [[ "$#" != 0 ]]; then
+    for testpath in "$@"; do
+        run_test "$testpath"
+    done
+else
+    run_test unit/auth
+    run_test unit/basic
+    run_test unit/type/list
+    run_test unit/type/set
+    run_test unit/type/zset
+fi
