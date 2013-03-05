@@ -1,7 +1,7 @@
 #!/bin/bash
-#
 # This is an extremely kludgy test launcher which runs the standard Redis
-# test suite against Cardboard.
+# test suite against Cardboard. The goal is kinda make the test suite complete
+# without crashing; then we can work on making the 1.0 release.
 
 # Install fake redis-server executable. For now, it takes care of parsing
 # the Redis config, extracting important bits of information and passing
@@ -12,6 +12,20 @@ ln -sfn $PWD/tests/redis-server-wrapper redis/src/redis-server
 sed -i redis/tests/support/server.tcl \
     -e 's/"PING\\r\\n"/"*1\\r\\n\\$4\\r\\nPING\\r\\n"/'
 
-# Run the test suites. Good luck.
+# Bypass assert_encoding since we don't have any.
+sed -i redis/tests/support/test.tcl \
+    -e 's/\(proc assert_encoding.*{\).*/\1 return/'
+
 cd redis
-./runtest --clients 1 --single unit/basic
+
+run_test() {
+    echo $'\x1b[0;1;33m'"Running test suite: $1"$'\x1b[0m'
+    ./runtest --clients 1 --single "$1"
+}
+
+# Run the test suites. Good luck.
+run_test unit/auth
+run_test unit/basic
+run_test unit/type/list
+run_test unit/type/set
+run_test unit/type/zset
