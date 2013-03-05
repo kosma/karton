@@ -1,0 +1,17 @@
+#!/bin/bash
+#
+# This is an extremely kludgy test launcher which runs the standard Redis
+# test suite against Cardboard.
+
+# Install fake redis-server executable. For now, it takes care of parsing
+# the Redis config, extracting important bits of information and passing
+# them as command line arguments to twisted_cardboard.
+ln -sfn $PWD/tests/redis-server-wrapper redis/src/redis-server
+
+# Fix PING testing logic. Cardboard doesn't support line-based protocol yet.
+sed -i redis/tests/support/server.tcl \
+    -e 's/"PING\\r\\n"/"*1\\r\\n\\$4\\r\\nPING\\r\\n"/'
+
+# Run the test suites. Good luck.
+cd redis
+./runtest --clients 1 --single unit/basic

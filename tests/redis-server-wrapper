@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+# Compatibility wrapper which parses Redis config and launches Cardboard.
+
+if [[ "$#" != 1 ]]; then
+    echo "Usage: $0 /path/to/redis.conf" 1>&2
+    exit 1
+fi
+
+while read -r option value; do
+    if [[ "$option" == "port" ]]; then
+        PORT="$value"
+    fi
+done < "$1"
+
+# make tests happy.
+echo "[$$]"
+echo "The server is now ready to accept connections on port $PORT"
+
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/../twisted_cardboard.py" --port=$PORT
