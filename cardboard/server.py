@@ -9,6 +9,7 @@ import random
 import signal
 import fnmatch
 import re
+import traceback
 from collections import deque
 from functools import partial
 try:
@@ -30,20 +31,23 @@ def pass_value(value_type):
     """Pass first method value using key."""
     def decorator(method):
         def decorated(self, key, *args):
-            try:
-                value = self._ht_get(key, value_type)
-                return method(self, value, *args)
-            finally:
-                self.ht[key] = value
-                self._ht_check(key)
+            value = self._ht_get(key, value_type)
+            result = method(self, value, *args)
+            self.ht[key] = value
+            self._ht_check(key)
+            return result
         decorated.__name__ = method.__name__
         return decorated
     return decorator
 
 
-setmethod = pass_value(set)
-hashmethod = pass_value(dict)
-listmethod = pass_value(deque)
+set_type = set
+hash_type = dict
+list_type = deque
+
+setmethod = pass_value(set_type)
+hashmethod = pass_value(hash_type)
+listmethod = pass_value(list_type)
 
 
 def pass_string(method):
@@ -90,13 +94,14 @@ class Server(object):
             handler = getattr(self, '%s' % command.upper())
             result = handler(*args[1:])
         except Exception as exc:
+            #print traceback.format_exc()
             return exc
         else:
             return result
 
     def _ht_get(self, key, type):
         value = self.ht.get(key, type())
-        assert isinstance(value, type)
+        assert isinstance(value, type), 'ERR Operation against a key holding the wrong kind of value'
         return value
 
     def _ht_check(self, key):
@@ -533,6 +538,7 @@ class Server(object):
 
     @setmethod
     def SADD(self, set, *members):
+        """Fully compatible."""
         assert members
         added = 0
         for member in members:
@@ -543,37 +549,87 @@ class Server(object):
 
     @setmethod
     def SCARD(self, set):
+        """Fully compatible."""
         return len(set)
 
     @setmethod
-    def SMEMBERS(self, set):
-        return list(set)
+    def SDIFF(self, set, *keys):
+        """Fully compatible."""
+        return set.difference(*[self._ht_get(key, set_type) for key in keys])
+
+    def SDIFFSTORE(self, destination, key, *keys):
+        """Fully compatible."""
+        self.ht[destination] = self._ht_get(key, set_type).difference(*[self._ht_get(key, set_type) for key in keys])
+        result = len(self.ht[destination])
+        self._ht_check(destination)
+        return result
 
     @setmethod
-    def SDIFF(self, set, *sets):
-        raise NotImplementedError
+    def SINTER(self, set, *keys):
+        """Fully compatible."""
+        return set.intersection(*[self._ht_get(key, set_type) for key in keys])
 
-    def SDIFFSTORE(self, destination, *keys):
-        raise NotImplementedError
+    def SINTERSTORE(self, destination, key, *keys):
+        """Fully compatible."""
+        self.ht[destination] = self._ht_get(key, set_type).intersection(*[self._ht_get(key, set_type) for key in keys])
+        result = len(self.ht[destination])
+        self._ht_check(destination)
+        return result
+
+    @setmethod
+    def SISMEMBER(self, set, member):
+        """Fully compatible."""
+        return int(member in set)
+
+    @setmethod
+    def SMEMBERS(self, set):
+        """Fully compatible."""
+        return set
+
+    def SMOVE(self, source, destination, member):
+        source_set = self._ht_get(source, set_type)
+        destination_set = self._ht_get(destination, set_type)
+        if member not in source_set:
+            return 0
+        else:
+            self.ht[destination] = destination_set
+            source_set.remove(member)
+            destination_set.add(member)
+            self._ht_check(source)
+            return 1
 
     @setmethod
     def SPOP(self, set):
+        """Fully compatible."""
         if set:
             return set.pop()
         else:
             return None
 
     @setmethod
-    def SRANDMEMBER(self, set):
-        if set:
-            member = set.pop()
-            set.add(member)
-            return member
+    def SRANDMEMBER(self, set, count=None):
+        """Compatible, but slow."""
+        if count is None:
+            # the easy path
+            if set:
+                return random.sample(set, 1)[0]
+            else:
+                return None
         else:
-            return None
+            # the hard path
+            count = int(count)
+            if set and count:
+                if count > 0:
+                    return random.sample(set, min(count, len(set)))
+                else:
+                    members = list(set)
+                    return [random.choice(members) for i in xrange(-count)]
+            else:
+                return []
 
     @setmethod
     def SREM(self, set, *members):
+        """Fully compatible."""
         assert members
         removed = 0
         for member in members:
@@ -582,6 +638,18 @@ class Server(object):
                 removed += 1
         return removed
 
+
+    @setmethod
+    def SUNION(self, set, *keys):
+        """Fully compatible."""
+        return set.union(*[self._ht_get(key, set_type) for key in keys])
+
+    def SUNIONSTORE(self, destination, key, *keys):
+        """Fully compatible."""
+        self.ht[destination] = self._ht_get(key, set_type).union(*[self._ht_get(key, set_type) for key in keys])
+        result = len(self.ht[destination])
+        self._ht_check(destination)
+        return result
 
     # Connection
 
@@ -621,7 +689,9 @@ class Server(object):
         elif subcommand == 'HT':
             return str(self.ht)
         else:
-            raise ValueError
+            #raise ValueError
+            # oh kludge I love you
+            return OK
 
     def FLUSHALL(self):
         """Fully compatible."""
