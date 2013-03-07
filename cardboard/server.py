@@ -33,7 +33,7 @@ def pass_value(value_type):
         def decorated(self, key, *args):
             value = self._ht_get(key, value_type)
             result = method(self, value, *args)
-            self.ht[key] = value
+            self.client.ht[key] = value
             self._ht_check(key)
             return result
         decorated.__name__ = method.__name__
@@ -58,7 +58,7 @@ def pass_string(method):
             value = self._ht_get(key, value_type)
             retval, new_value = method(self, value, *args)
         finally:
-            self.ht[key] = new_value
+            self.client.ht[key] = new_value
             self._ht_check(key)
             return new_value
     decorated.__name__ = method.__name__
@@ -72,7 +72,7 @@ class Client(object):
         self.addr = addr
 
     def do(self, request):
-        return self.server.do(*request)
+        return self.server.do(self, *request)
 
     def die(self):
         # break circular references!
@@ -83,30 +83,37 @@ class Server(object):
 
     def __init__(self, dbs=16):
         self.dbs = [{} for index in xrange(dbs)]
-        self.ht = self.dbs[0]
 
     def new_client(self, addr):
-        return Client(self, addr)
+        client = Client(self, addr)
+        self.do(client, 'SELECT', '0')
+        return client
 
-    def do(self, *args):
+    def do(self, client, *args):
         try:
+            # setup context.
+            self.client = client
+            # run the command
             command = args[0]
             handler = getattr(self, '%s' % command.upper())
             result = handler(*args[1:])
         except Exception as exc:
-            #print traceback.format_exc()
+            print traceback.format_exc()
             return exc
         else:
             return result
+        finally:
+            # teardown context.
+            del self.client
 
     def _ht_get(self, key, type):
-        value = self.ht.get(key, type())
+        value = self.client.ht.get(key, type())
         assert isinstance(value, type), 'ERR Operation against a key holding the wrong kind of value'
         return value
 
     def _ht_check(self, key):
-        if key in self.ht and not self.ht[key]:
-            del self.ht[key]
+        if key in self.client.ht and not self.client.ht[key]:
+            del self.client.ht[key]
 
     # Keys
 
@@ -115,19 +122,19 @@ class Server(object):
         assert keys
         count = 0
         for key in keys:
-            if key in self.ht:
-                del self.ht[key]
+            if key in self.client.ht:
+                del self.client.ht[key]
                 count += 1
         return count
 
     def DUMP(self, key):
         """Non-standard: uses Pickle instead of Redis format."""
-        if key in self.ht:
-            return pickle.dumps(self.ht[key])
+        if key in self.client.ht:
+            return pickle.dumps(self.client.ht[key])
 
     def EXISTS(self, key):
         """Fully compatible."""
-        if key in self.ht:
+        if key in self.client.ht:
             return 1
         else:
             return 0
@@ -141,7 +148,7 @@ class Server(object):
     def KEYS(self, pattern):
         """Mostly compatible (wasn't tested extensively)."""
         pattern = re.sub(r'\\(.)', r'[\1]', pattern)
-        return filter(partial(fnmatch.fnmatchcase, pat=pattern), self.ht.keys())
+        return filter(partial(fnmatch.fnmatchcase, pat=pattern), self.client.ht.keys())
 
     def MOVE(self, key, db):
         raise NotImplementedError
@@ -151,32 +158,32 @@ class Server(object):
 
     def RANDOMKEY(self):
         """Compatible, but slow: O(n)."""
-        if self.ht:
-            return random.choice(self.ht.keys())
+        if self.client.ht:
+            return random.choice(self.client.ht.keys())
 
     def RENAME(self, key, newkey):
         """Fully compatible."""
         assert key != newkey
-        self.ht[newkey] = self.ht[key]
-        del self.ht[key]
+        self.client.ht[newkey] = self.client.ht[key]
+        del self.client.ht[key]
         return OK
 
     def RENAMENX(self, key, newkey):
         """Fully compatible."""
         assert key != newkey
-        assert key in self.ht
-        if newkey in self.ht:
+        assert key in self.client.ht
+        if newkey in self.client.ht:
             return 0
         else:
-            self.ht[newkey] = self.ht[key]
-            del self.ht[key]
+            self.client.ht[newkey] = self.client.ht[key]
+            del self.client.ht[key]
             return 1
 
     def RESTORE(self, key, ttl, serialized_value):
         """Non-standard; uses Pickle instead of Redis format."""
         if ttl != '0':
             raise NotImplementedError
-        self.ht[key] = pickle.loads(serialized_value)
+        self.client.ht[key] = pickle.loads(serialized_value)
         return OK
 
     def SORT(self, key, *args):
@@ -230,16 +237,16 @@ class Server(object):
 
     def TYPE(self, key):
         """Fully compatible."""
-        return self._typemap[type(self.ht.get(key, None))]
+        return self._typemap[type(self.client.ht.get(key, None))]
 
     # Strings
 
     def APPEND(self, key, value):
         """Fully compatible."""
-        old_value = self.ht.get(key, '')
+        old_value = self.client.ht.get(key, '')
         assert isinstance(old_value, str)
-        self.ht[key] = old_value + value
-        return len(self.ht[key])
+        self.client.ht[key] = old_value + value
+        return len(self.client.ht[key])
 
     def BITCOUNT(self, key):
         raise NotImplementedError
@@ -257,7 +264,7 @@ class Server(object):
 
     def GET(self, key):
         """Fully compatible."""
-        value = self.ht.get(key)
+        value = self.client.ht.get(key)
         if isinstance(value, str):
             return value
         elif value is None:
@@ -272,14 +279,14 @@ class Server(object):
         """Fully compatible."""
         start = int(start)
         end = int(end)
-        value = self.ht.get(key, '')
+        value = self.client.ht.get(key, '')
         return value[redis_slice(start, end)]
 
     def GETSET(self, key, value):
         """Fully compatible."""
-        old_value = self.ht.get(key, '')
+        old_value = self.client.ht.get(key, '')
         assert isinstance(value, str)
-        self.ht[key] = value
+        self.client.ht[key] = value
         return old_value
 
     def INCR(self, key):
@@ -288,25 +295,25 @@ class Server(object):
 
     def INCRBY(self, key, increment):
         """Fully compatible."""
-        value = self.ht.get(key, '0')
+        value = self.client.ht.get(key, '0')
         assert isinstance(value, str)
-        self.ht[key] = str(int(value) + int(increment))
-        return self.ht[key]
+        self.client.ht[key] = str(int(value) + int(increment))
+        return self.client.ht[key]
 
     def INCRBYFLOAT(self, key, increment):
         """Fully compatible."""
-        value = self.ht.get(key, '0')
+        value = self.client.ht.get(key, '0')
         assert isinstance(value, str)
         result = '%.17f' % (float(value) + float(increment))
-        self.ht[key] = result.rstrip('0').rstrip('.')
-        return self.ht[key]
+        self.client.ht[key] = result.rstrip('0').rstrip('.')
+        return self.client.ht[key]
  
     def MGET(self, *keys):
         """Fully compatible."""
         assert keys
         values = []
         for key in keys:
-            value = self.ht.get(key, '')
+            value = self.client.ht.get(key, '')
             if isinstance(value, str):
                 values.append(value)
             else:
@@ -320,7 +327,7 @@ class Server(object):
         for index in xrange(0, len(args), 2):
             key = args[index]
             value = args[index+1]
-            self.ht[key] = value
+            self.client.ht[key] = value
         return OK
 
     def MSETNX(self, *args):
@@ -329,12 +336,12 @@ class Server(object):
         assert len(args) % 2 == 0
         for index in xrange(0, len(args), 2):
             key = args[index]
-            if key in self.ht:
+            if key in self.client.ht:
                 return 0
         for index in xrange(0, len(args), 2):
             key = args[index]
             value = args[index+1]
-            self.ht[key] = value
+            self.client.ht[key] = value
         return 1
 
     def PSETEX(self, key, milliseconds, value):
@@ -342,7 +349,7 @@ class Server(object):
 
     def SET(self, key, value):
         """Fully compatible."""
-        self.ht[key] = value
+        self.client.ht[key] = value
         return OK
 
     def SETBIT(self, key, offset, value):
@@ -353,8 +360,8 @@ class Server(object):
 
     def SETNX(self, key, value):
         """Fully compatible."""
-        if key not in self.ht:
-            self.ht[key] = value
+        if key not in self.client.ht:
+            self.client.ht[key] = value
             return 1
         else:
             return 0
@@ -362,14 +369,14 @@ class Server(object):
     def SETRANGE(self, key, offset, value):
         """Fully compatible."""
         offset = int(offset)
-        old_value = self.ht.get(key, '')
+        old_value = self.client.ht.get(key, '')
         assert isinstance(old_value, str)
-        self.ht[key] = old_value[:offset] + value + old_value[offset+len(value)]
-        return len(self.ht[key])
+        self.client.ht[key] = old_value[:offset] + value + old_value[offset+len(value)]
+        return len(self.client.ht[key])
 
     def STRLEN(self, key):
         """Fully compatible."""
-        value = self.ht.get(key, '')
+        value = self.client.ht.get(key, '')
         assert isinstance(value, str)
         return len(value)
 
@@ -559,8 +566,8 @@ class Server(object):
 
     def SDIFFSTORE(self, destination, key, *keys):
         """Fully compatible."""
-        self.ht[destination] = self._ht_get(key, set_type).difference(*[self._ht_get(key, set_type) for key in keys])
-        result = len(self.ht[destination])
+        self.client.ht[destination] = self._ht_get(key, set_type).difference(*[self._ht_get(key, set_type) for key in keys])
+        result = len(self.client.ht[destination])
         self._ht_check(destination)
         return result
 
@@ -571,8 +578,8 @@ class Server(object):
 
     def SINTERSTORE(self, destination, key, *keys):
         """Fully compatible."""
-        self.ht[destination] = self._ht_get(key, set_type).intersection(*[self._ht_get(key, set_type) for key in keys])
-        result = len(self.ht[destination])
+        self.client.ht[destination] = self._ht_get(key, set_type).intersection(*[self._ht_get(key, set_type) for key in keys])
+        result = len(self.client.ht[destination])
         self._ht_check(destination)
         return result
 
@@ -592,7 +599,7 @@ class Server(object):
         if member not in source_set:
             return 0
         else:
-            self.ht[destination] = destination_set
+            self.client.ht[destination] = destination_set
             source_set.remove(member)
             destination_set.add(member)
             self._ht_check(source)
@@ -646,8 +653,8 @@ class Server(object):
 
     def SUNIONSTORE(self, destination, key, *keys):
         """Fully compatible."""
-        self.ht[destination] = self._ht_get(key, set_type).union(*[self._ht_get(key, set_type) for key in keys])
-        result = len(self.ht[destination])
+        self.client.ht[destination] = self._ht_get(key, set_type).union(*[self._ht_get(key, set_type) for key in keys])
+        result = len(self.client.ht[destination])
         self._ht_check(destination)
         return result
 
@@ -669,14 +676,14 @@ class Server(object):
 
     def SELECT(self, db):
         """Fully compatible."""
-        self.ht = self.dbs[int(db)]
+        self.client.ht = self.dbs[int(db)]
         return OK
 
     # Server
 
     def DBSIZE(self):
         """Fully compatible."""
-        return len(self.ht)
+        return len(self.client.ht)
 
     def DEBUG(self, subcommand, *args):
         """Non-standard, partially implemented."""
@@ -687,7 +694,7 @@ class Server(object):
             os.kill(os.getpid(), signal.SIGSEGV)
             return OK
         elif subcommand == 'HT':
-            return str(self.ht)
+            return str(self.client.ht)
         else:
             #raise ValueError
             # oh kludge I love you
@@ -701,7 +708,7 @@ class Server(object):
 
     def FLUSHDB(self):
         """Fully compatible."""
-        self.ht.clear()
+        self.client.ht.clear()
         return OK
 
     def INFO(self):
