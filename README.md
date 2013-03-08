@@ -12,7 +12,7 @@ NOTE: This project is work in progress.
 Usage
 -----
 
-Requirements: ``twisted``, ``hiredis``.
+Requirements: ``twisted``, ``hiredis``, ``blist``.
 
 Clone the repository. Start with ``./twisted_karton.py``. Use your favourite
 client or simply ``redis-cli`` to interact with it.
