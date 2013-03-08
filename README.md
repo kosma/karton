@@ -23,6 +23,9 @@ Status
 * Starts. (yay!)
 * Basic commands work.
 * You can actually run the Redis test suite against it! ``./run_redis_tests``
+* Test suites passing so far: ``unit/type/set``, ``unit/type/list`` (except
+  blocking commands they're not supported yet - but should be easy enough
+  to implement using Twisted's Deferreds).
 
 Caveats
 -------
