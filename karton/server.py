@@ -10,14 +10,13 @@ import signal
 import fnmatch
 import re
 import traceback
-from collections import deque
 from functools import partial
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
 
-from blist import blist, sorteddict
+from blist import blist
 
 from .protocol import Status, Error, OK
 
@@ -43,7 +42,7 @@ def pass_value(value_type):
 
 set_type = set
 hash_type = dict
-list_type = deque
+list_type = blist
 
 setmethod = pass_value(set_type)
 hashmethod = pass_value(hash_type)
@@ -229,9 +228,9 @@ class Server(object):
 
     _typemap = {
         str: 'string',
-        deque: 'list',
-        set: 'set',
-        dict: 'hash',
+        list_type: 'list',
+        set_type: 'set',
+        hash_type: 'hash',
         type(None): 'none',
     }
 
@@ -481,11 +480,25 @@ class Server(object):
     @listmethod
     def LINDEX(self, list, index):
         """Fully compatible."""
-        return list[int(index)]
+        try:
+            return list[int(index)]
+        except IndexError:
+            return None
 
     @listmethod
     def LINSERT(self, list, where, pivot, value):
-        raise NotImplementedError
+        where = where.upper()
+        assert where in ('BEFORE', 'AFTER'), 'ERR syntax error: where != BEFORE|AFTER'
+        try:
+            index = list.index(pivot)
+        except ValueError:
+            return -1
+        else:
+            if where == 'BEFORE':
+                list.insert(index, value)
+            else:
+                list.insert(index+1, value)
+            return len(list)
 
     @listmethod
     def LLEN(self, list):
@@ -494,43 +507,98 @@ class Server(object):
 
     @listmethod
     def LPOP(self, list):
+        """Fully compatible."""
         try:
-            return list.popleft()
+            return list.pop(0)
         except IndexError:
             return None
 
     @listmethod
     def LPUSH(self, list, *values):
+        """Fully compatible."""
         assert values
-        list.extendleft(values)
+        for value in values:
+            list.insert(0, value)
         return len(list)
 
-    def LPUSHX(self, key, value):
-        raise NotImplementedError
+    @listmethod
+    def LPUSHX(self, list, value):
+        """Fully compatible."""
+        if list:
+            list.insert(0, value)
+        return len(list)
 
     @listmethod
     def LRANGE(self, list, start, stop):
+        """More-or-less compatible, breaks sometimes."""
         return list[redis_slice(start, stop)]
 
     @listmethod
     def LREM(self, list, count, value):
-        raise NotImplementedError
+        """Compatible, but slower in some cases."""
+        count = int(count)
+        removed = 0
+        if count > 0:
+            while removed < count:
+                try:
+                    list.remove(value)
+                    removed += 1
+                except ValueError:
+                    break
+        elif count == 0:
+            while True:
+                try:
+                    list.remove(value)
+                    removed += 1
+                except ValueError:
+                    break
+        else:
+            count = -count
+            list.reverse()
+            while removed < count:
+                try:
+                    list.remove(value)
+                    removed += 1
+                except ValueError:
+                    break
+            list.reverse()
+        return removed
 
     @listmethod
     def LSET(self, list, index, value):
-        list[int(index)] = value
+        """Fully compatible."""
+        if not list:
+            return Error('ERR key does not exist')
+        try:
+            list[int(index)] = value
+        except IndexError:
+            return Error('ERR index out of range')
         return OK
 
     @listmethod
     def LTRIM(self, list, start, stop):
-        raise NotImplementedError
+        """Fully compatible."""
+        list[:] = list[redis_slice(start, stop)]
+        return OK
 
     @listmethod
     def RPOP(self, list):
+        """Fully compatible."""
         try:
             return list.pop()
         except IndexError:
             return None
+
+    def RPOPLPUSH(self, source_key, destination_key):
+        """Fully compatible."""
+        source = self._ht_get(source_key, list_type)
+        if not source:
+            return None
+        destination = self._ht_get(destination_key, list_type)
+        item = source.pop()
+        destination.insert(0, item)
+        self.client.ht[destination_key] = destination
+        return item
 
     @listmethod
     def RPUSH(self, list, *values):
@@ -538,8 +606,11 @@ class Server(object):
         list.extend(values)
         return len(list)
 
-    def RPUSHX(self, key, value):
-        raise NotImplementedError
+    @listmethod
+    def RPUSHX(self, list, value):
+        if list:
+            list.append(value)
+        return len(list)
 
     # Sets
 
