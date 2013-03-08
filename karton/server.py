@@ -715,7 +715,7 @@ class Server(object):
         """Non-standard (implementation-specific command)."""
         sysname, nodename, release, version, machine = os.uname()
         lines = [
-            'server:cardboard-redis',
+            'server:karton',
             'os:%s %s %s' % (sysname, release, machine),
             'python:%s.%s.%s' % sys.version_info[0:3],
         ]

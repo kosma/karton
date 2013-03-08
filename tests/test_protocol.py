@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from cardboard.protocol import python_to_redis, Status, Error
+from karton.protocol import python_to_redis, Status, Error
 
 
 def test_python_to_redis():

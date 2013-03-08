@@ -1,7 +1,11 @@
-cardboard
-=========
+karton
+======
 
 Redis reimplementation in Python.
+
+*"Karton"* means cardboard in Polish, and reflects the author's tendency to build
+stuff out of whatever is at hand, even if it doesn't turn out as sturdy as
+desired.
 
 NOTE: This project is work in progress.
 
@@ -10,7 +14,7 @@ Usage
 
 Requirements: ``twisted``, ``hiredis``.
 
-Clone the repository. Start with ``./twisted_cardboard.py``. Use your favourite
+Clone the repository. Start with ``./twisted_karton.py``. Use your favourite
 client or simply ``redis-cli`` to interact with it.
 
 Status
@@ -52,9 +56,3 @@ Why would you do this?
 
 Because it's fun. Because I can. Because having an embeddable, zero-latency,
 synchronous Redis instance *inside* my Python program is simply awesome.
-
-There is a Python project named cardboard already!
---------------------------------------------------
-
-I know. This is a placeholder codename which will change once I invent
-something better.

@@ -1,19 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # 
-# Twisted-based Cardboard server.
+# Twisted-based Karton server.
 
 import os
 import sys
 import logging
-logger = logging.getLogger('twisted_cardboard')
+logger = logging.getLogger('twisted_karton')
 
 from twisted.python import log, usage
 from twisted.internet import defer, protocol
 import hiredis
 
-import cardboard.protocol
-import cardboard.server
+import karton.protocol
+import karton.server
 
 
 def reactor():
@@ -37,7 +37,7 @@ class RedisProtocol(protocol.Protocol):
         request = self.reader.gets()
         if request is not False:
             response = self.client.do(request)
-            raw = cardboard.protocol.python_to_redis(response)
+            raw = karton.protocol.python_to_redis(response)
             self.transport.write(raw)
 
 
@@ -46,7 +46,7 @@ class RedisProtocolFactory(protocol.ServerFactory):
     protocol = RedisProtocol
 
     def startFactory(self):
-        self.server = cardboard.server.Server()
+        self.server = karton.server.Server()
 
     def buildProtocol(self, addr):
         return self.protocol(self.server, addr)
