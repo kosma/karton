@@ -9,12 +9,12 @@
 ln -sfn $PWD/tests/redis-server-wrapper redis/src/redis-server
 
 # Fix PING testing logic. Karton doesn't support line-based protocol yet.
-sed -i redis/tests/support/server.tcl \
-    -e 's/"PING\\r\\n"/"*1\\r\\n\\$4\\r\\nPING\\r\\n"/'
+sed -e 's/"PING\\r\\n"/"*1\\r\\n\\$4\\r\\nPING\\r\\n"/' \
+    -i'~' redis/tests/support/server.tcl
 
 # Bypass assert_encoding since we don't have any.
-sed -i redis/tests/support/test.tcl \
-    -e 's/\(proc assert_encoding.*{\).*/\1 return/'
+sed -e 's/\(proc assert_encoding.*{\).*/\1 return/' \
+    -i'~' redis/tests/support/test.tcl
 
 cd redis
 
