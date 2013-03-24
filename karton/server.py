@@ -295,15 +295,22 @@ class Server(object):
     def INCRBY(self, key, increment):
         """Fully compatible."""
         value = self.client.ht.get(key, '0')
-        assert isinstance(value, str)
+        assert isinstance(value, str), 'ERR operation on a key holding a wrong kind of value'
+        assert not value[0].isspace(), 'ERR invalid value'
+        assert not value[-1].isspace(), 'ERR invalid value'
         self.client.ht[key] = str(int(value) + int(increment))
         return self.client.ht[key]
 
     def INCRBYFLOAT(self, key, increment):
         """Fully compatible."""
         value = self.client.ht.get(key, '0')
-        assert isinstance(value, str)
-        result = '%.17f' % (float(value) + float(increment))
+        assert isinstance(value, str), 'ERR operation on a key holding a wrong kind of value'
+        assert not value[0].isspace(), 'ERR invalid value'
+        assert not value[-1].isspace(), 'ERR invalid value'
+        increment = float(increment)
+        assert not math.isnan(increment), 'ERR would produce NaN'
+        assert not math.isinf(increment), 'ERR would produce Infinity'
+        result = '%.17f' % (float(value) + increment)
         self.client.ht[key] = result.rstrip('0').rstrip('.')
         return self.client.ht[key]
  
