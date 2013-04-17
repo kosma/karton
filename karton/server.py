@@ -19,11 +19,17 @@ except ImportError:
 from blist import blist
 
 from .protocol import Status, Error, OK
+from .sorteddict import sorteddict as zdict
 
 
 def redis_slice(start, end):
     """Convert Redis start/end to Python slice."""
     return slice(int(start), (int(end)+1) or None)
+
+
+def floaty(number):
+    string = '%.17f' % number
+    return string.rstrip('0').rstrip('.')
 
 
 def pass_value(value_type):
@@ -43,10 +49,12 @@ def pass_value(value_type):
 set_type = set
 hash_type = dict
 list_type = blist
+zset_type = zdict
 
 setmethod = pass_value(set_type)
 hashmethod = pass_value(hash_type)
 listmethod = pass_value(list_type)
+zsetmethod = pass_value(zset_type)
 
 
 def pass_string(method):
@@ -735,6 +743,65 @@ class Server(object):
         result = len(self.client.ht[destination])
         self._ht_check(destination)
         return result
+
+    # Sorted Sets
+
+    @zsetmethod
+    def ZADD(self, zset, *args):
+        assert args
+        assert len(args) % 2 == 0
+        pairs = blist()
+        # check for errors before doing anything
+        for index in xrange(0, len(args), 2):
+            score = float(args[index])
+            member = args[index+1]
+            pairs.append((score, member))
+        for score, member in pairs:
+            zset[member] = score
+        return OK
+
+    @zsetmethod
+    def ZCARD(self, zset):
+        return len(zset)
+
+    @zsetmethod
+    def ZINCRBY(self, zset, increment, member):
+        increment = float(increment)
+        zset[member] = zset.get(member, 0.0) + increment
+        return OK
+
+    @zsetmethod
+    def ZRANGE(self, zset, start, stop, *flags):
+        # TODO: better flags checking
+        if len(flags) == 1 and flags[0].upper() == 'WITHSCORES':
+            result = blist()
+            for key, value in zset.items()[redis_slice(start, stop)]:
+                result.append(key)
+                astext = '%.17f' % value
+                astext = astext.rstrip('0').rstrip('.')
+                result.append(astext)
+            return result
+        else:
+            print 'keys'
+            return zset.viewkeys()[redis_slice(start, stop)]
+
+    @zsetmethod
+    def ZRANK(self, zset, member):
+        return zset._sortedkeys.index(member)
+
+    @zsetmethod
+    def ZREM(self, zset, *members):
+        assert members
+        deleted = 0
+        for member in members:
+            if member in zset:
+                del zset[member]
+                deleted += 1
+        return deleted
+
+    @zsetmethod
+    def ZSCORE(self, zset, member):
+        return floaty(zset[member])
 
     # Connection
 
