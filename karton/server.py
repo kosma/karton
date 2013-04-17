@@ -769,13 +769,20 @@ class Server(object):
         return len(zset)
 
     @zsetmethod
+    def ZCOUNT(self, zset, min, max):
+        raise NotImplementedError
+
+    @zsetmethod
     def ZINCRBY(self, zset, increment, member):
         increment = float(increment)
         assert not math.isnan(increment), "ERR not a valid floating point value"
         score = zset.get(member, 0.0) + increment
         assert not math.isnan(score), "ERR resulting score is NaN"
         zset[member] = score
-        return OK
+        return floaty(score)
+
+    def ZINTERSTORE(self, destination, numkeys, *args):
+        raise NotImplementedError
 
     @zsetmethod
     def ZRANGE(self, zset, start, stop, *flags):
@@ -793,6 +800,10 @@ class Server(object):
             return zset.viewkeys()[redis_slice(start, stop)]
 
     @zsetmethod
+    def ZRANGEBYSCORE(self, zset, min, max, *args):
+        raise NotImplementedError
+
+    @zsetmethod
     def ZRANK(self, zset, member):
         return zset._sortedkeys.index(member)
 
@@ -807,8 +818,31 @@ class Server(object):
         return deleted
 
     @zsetmethod
+    def ZREMRANGEBYRANK(self, zset, start, stop):
+        raise NotImplementedError
+
+    @zsetmethod
+    def ZREMRANGEBYSCORE(self, zset, min, max):
+        raise NotImplementedError
+
+    @zsetmethod
+    def ZREVRANGE(self, zset, start, stop, *args):
+        raise NotImplementedError
+
+    @zsetmethod
+    def ZREVRANGEBYSCORE(self, zset, max, min, *args):
+        raise NotImplementedError
+
+    @zsetmethod
+    def ZREVRANK(self, zset, member):
+        raise NotImplementedError
+
+    @zsetmethod
     def ZSCORE(self, zset, member):
         return floaty(zset[member])
+
+    def ZINTERSTORE(self, destination, numkeys, *args):
+        raise NotImplementedError
 
     # Connection
 
