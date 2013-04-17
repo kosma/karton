@@ -748,17 +748,21 @@ class Server(object):
 
     @zsetmethod
     def ZADD(self, zset, *args):
-        assert args
+        assert args, 'syntax error, arguments required'
         assert len(args) % 2 == 0
         pairs = blist()
         # check for errors before doing anything
         for index in xrange(0, len(args), 2):
             score = float(args[index])
+            assert not math.isnan(score), "ERR not a valid floating point value"
             member = args[index+1]
             pairs.append((score, member))
+        added = 0
         for score, member in pairs:
+            if member not in zset:
+                added += 1
             zset[member] = score
-        return OK
+        return added
 
     @zsetmethod
     def ZCARD(self, zset):
@@ -767,7 +771,10 @@ class Server(object):
     @zsetmethod
     def ZINCRBY(self, zset, increment, member):
         increment = float(increment)
-        zset[member] = zset.get(member, 0.0) + increment
+        assert not math.isnan(increment), "ERR not a valid floating point value"
+        score = zset.get(member, 0.0) + increment
+        assert not math.isnan(score), "ERR resulting score is NaN"
+        zset[member] = score
         return OK
 
     @zsetmethod
@@ -825,6 +832,12 @@ class Server(object):
         return OK
 
     # Server
+
+    def CONFIG(self, command, option, value=None):
+        """FIXME: kludge for Redis unit tests."""
+        if command.upper() == 'SET' and value is not None:
+            return OK
+        raise NotImplementedError
 
     def DBSIZE(self):
         """Fully compatible."""
